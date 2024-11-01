@@ -25,7 +25,7 @@
         }
 		#labelToggleButton {
             position: absolute;
-            top: 56%;
+            top: 85%;
             left: 1%;
             z-index: 1000;
             background-color: #fff;
@@ -2930,57 +2930,106 @@ binocularsIcon.parentNode.appendChild(textBox);
                 filterFunc();
             };
             div_road_stype.appendChild(reset_road_stype);
-			var drawnItems = new L.FeatureGroup();
-        map.addLayer(drawnItems);
+			// Initialize the feature group to store editable layers
+var drawnItems = new L.FeatureGroup();
+map.addLayer(drawnItems);
 
-			 var drawControl = new L.Control.Draw({
-            draw: {
-                polygon: true,
-                polyline: true,
-                rectangle: true,
-                circle: true,
-                marker: true,
-            },
-            edit: {
-                featureGroup: drawnItems,
-                remove: true,
-            },
-        });
-        map.addControl(drawControl);
-// Set custom CSS to position the control on the right side
-drawControl.setPosition('topright');
-        // Event handling for drawn items
-        map.on('draw:created', function (e) {
-            var layer = e.layer;
+// Add the Leaflet Draw control to the map
+var drawControl = new L.Control.Draw({
+    edit: {
+        featureGroup: drawnItems // The FeatureGroup is where edit/delete shapes are stored
+    },
+    draw: {
+        polyline: true, // Allow drawing lines (polylines)
+        marker: true // Allow point markers
+    }
+});
+map.addControl(drawControl);
 
-            // Add the newly drawn layer to drawnItems
-            drawnItems.addLayer(layer);
+// Function to save data to localStorage (for points and lines)
+function saveToLocalStorage() {
+    var savedData = drawnItems.toGeoJSON();
+    localStorage.setItem('drawnShapes', JSON.stringify(savedData));
+}
 
-            // Handle the new feature (e.g., display information or perform actions)
-        });
+// Function to load data from localStorage
+function loadFromLocalStorage() {
+    var savedData = JSON.parse(localStorage.getItem('drawnShapes'));
+    if (savedData) {
+        L.geoJSON(savedData, {
+            onEachFeature: function (feature, layer) {
+                drawnItems.addLayer(layer); // Add to the FeatureGroup for editing
 
-        map.on('draw:deleted', function (e) {
-            var layers = e.layers;
-            layers.eachLayer(function (layer) {
-                drawnItems.removeLayer(layer);
-            });
-        });
-				var printControl = L.Control.extend({
-      options: {
-        position: 'topright'
-      },
-      onAdd: function (map) {
-        var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-        container.innerHTML = '<a id="customPrintButton" title="Print Map" href="#" style="font-size: 18px;">🖨️</a>';
-        container.onclick = function () {
-          window.print();
-        };
-        return container;
-      }
+                // For points and lines, allow deletion on click
+                if (feature.geometry.type === 'Point' || feature.geometry.type === 'LineString') {
+                    layer.on('click', function() {
+                        var deleteConfirmation = confirm('Do you want to delete this item?');
+                        if (deleteConfirmation) {
+                            // Remove the layer
+                            drawnItems.removeLayer(layer);
+                            saveToLocalStorage(); // Save the updated shapes
+                            alert('Item deleted');
+                        }
+                    });
+                }
+
+                // Bind a popup to show the name and id if they exist
+                if (feature.properties && feature.properties.name && feature.properties.id) {
+                    layer.bindPopup('Name: ' + feature.properties.name + '<br>ID: ' + feature.properties.id);
+                }
+            }
+        }).addTo(map);
+    }
+}
+
+// Load saved shapes when the page loads
+loadFromLocalStorage();
+
+// Event listener for when something is created on the map
+map.on(L.Draw.Event.CREATED, function (event) {
+    var layer = event.layer;
+
+    // Prompt the user for attributes (name and id)
+    var name = prompt('Enter a name for this shape:');
+    var id = prompt('Enter an ID for this shape:');
+
+    // Add properties to the feature (GeoJSON format)
+    layer.feature = layer.feature || {};
+    layer.feature.type = "Feature";
+    layer.feature.properties = {
+        name: name,
+        id: id
+    };
+
+    // Bind a popup to display the attributes
+    layer.bindPopup('Name: ' + name + '<br>ID: ' + id);
+
+    // Add the new layer to the feature group
+    drawnItems.addLayer(layer);
+
+    // Save the drawn shapes to localStorage
+    saveToLocalStorage();
+
+    // Bind a click event for deletion
+    layer.on('click', function() {
+        var deleteConfirmation = confirm('Do you want to delete this item?');
+        if (deleteConfirmation) {
+            drawnItems.removeLayer(layer);
+            saveToLocalStorage(); // Save after deletion
+            alert('Item deleted');
+        }
     });
+});
 
-    // Add the custom print control to the map
-    map.addControl(new printControl());
+// Event listener for when something is edited on the map
+map.on(L.Draw.Event.EDITED, function () {
+    saveToLocalStorage(); // Save the edited shapes to localStorage
+});
+
+// Event listener for when something is deleted from the map
+map.on(L.Draw.Event.DELETED, function () {
+    saveToLocalStorage(); // Save the remaining shapes to localStorage
+});
         </script>
     </body>
 </html>
